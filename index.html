@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MultivarMA — Multivariate Meta-Analysis</title>
+<meta name="description" content="Browser-based multivariate meta-analysis with Riley random-effects model, borrowing of strength, and joint forest plots.">
+<meta property="og:title" content="MultivarMA — Multivariate Meta-Analysis">
+<meta property="og:description" content="Joint synthesis of 2-3 correlated outcomes using Riley multivariate random-effects model.">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0e17;--card:rgba(20,28,50,0.7);--glass:rgba(30,40,70,0.5);
+  --border:rgba(100,140,255,0.15);--text:#e0e6f0;--dim:#8090b0;
+  --accent:#5b8cff;--accent2:#ff6b8a;--accent3:#4ecdc4;
+  --green:#22c55e;--red:#ef4444;--gold:#f59e0b;
+  --font:'Segoe UI',system-ui,-apple-system,sans-serif;
+  --mono:'Cascadia Code','Fira Code','Consolas',monospace;
+}
+html{font-size:14px}
+body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;top:0;left:0;width:100%;height:100%;background:radial-gradient(ellipse at 20% 20%,rgba(91,140,255,0.08),transparent 60%),radial-gradient(ellipse at 80% 80%,rgba(255,107,138,0.05),transparent 60%);pointer-events:none;z-index:0}
+
+h1,h2,h3{font-weight:600;letter-spacing:-0.02em}
+a{color:var(--accent);text-decoration:none}
+
+.container{max-width:1400px;margin:0 auto;padding:1rem;position:relative;z-index:1}
+header{text-align:center;padding:1.5rem 0 1rem}
+header h1{font-size:2rem;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+header p{color:var(--dim);margin-top:0.3rem;font-size:0.95rem}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:1rem;backdrop-filter:blur(12px)}
+.card h2{font-size:1.1rem;margin-bottom:0.75rem;color:var(--accent)}
+.card h3{font-size:0.95rem;margin-bottom:0.5rem;color:var(--accent2)}
+
+.grid2{display:grid;grid-template-columns:380px 1fr;gap:1rem;align-items:start}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+
+label{display:block;font-size:0.85rem;color:var(--dim);margin-bottom:0.25rem}
+textarea{width:100%;font-family:var(--mono);font-size:0.8rem;background:rgba(0,0,0,0.3);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:0.6rem;resize:vertical;min-height:140px}
+textarea:focus{outline:none;border-color:var(--accent)}
+input[type=text],input[type=number],select{width:100%;background:rgba(0,0,0,0.3);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:0.45rem 0.6rem;font-size:0.85rem;font-family:var(--font)}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+
+.btn{display:inline-flex;align-items:center;gap:0.4rem;padding:0.5rem 1.1rem;border:none;border-radius:8px;font-size:0.85rem;font-weight:600;cursor:pointer;transition:all 0.2s}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#3d6ce8);color:#fff}
+.btn-primary:hover{filter:brightness(1.15);transform:translateY(-1px)}
+.btn-secondary{background:rgba(91,140,255,0.12);color:var(--accent);border:1px solid var(--border)}
+.btn-secondary:hover{background:rgba(91,140,255,0.22)}
+.btn-sm{padding:0.35rem 0.8rem;font-size:0.8rem}
+
+.row{display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem}
+.row>*{flex:1;min-width:0}
+
+.slider-row{display:flex;align-items:center;gap:0.75rem}
+.slider-row input[type=range]{flex:1}
+.slider-val{font-family:var(--mono);font-size:0.85rem;min-width:3.5rem;text-align:center;color:var(--accent)}
+
+.results-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media(max-width:1100px){.results-grid{grid-template-columns:1fr}}
+
+table{width:100%;border-collapse:collapse;font-size:0.82rem}
+th{text-align:left;padding:0.4rem 0.6rem;border-bottom:1px solid var(--border);color:var(--dim);font-weight:600}
+td{padding:0.4rem 0.6rem;border-bottom:1px solid rgba(100,140,255,0.06)}
+tr:hover td{background:rgba(91,140,255,0.04)}
+
+.svg-container{width:100%;overflow-x:auto}
+.svg-container svg{display:block;margin:0 auto}
+
+.stat-box{display:inline-flex;flex-direction:column;align-items:center;background:rgba(0,0,0,0.2);border-radius:8px;padding:0.6rem 1rem;min-width:100px}
+.stat-box .val{font-size:1.3rem;font-weight:700;color:var(--accent)}
+.stat-box .lbl{font-size:0.75rem;color:var(--dim);margin-top:0.15rem}
+
+.export-row{display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap}
+
+#errorMsg{color:var(--red);font-size:0.85rem;margin-top:0.5rem;display:none}
+#resultsSection{display:none}
+
+.tag{display:inline-block;padding:0.15rem 0.5rem;border-radius:4px;font-size:0.75rem;font-weight:600}
+.tag-mv{background:rgba(91,140,255,0.15);color:var(--accent)}
+.tag-uv{background:rgba(255,107,138,0.15);color:var(--accent2)}
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+  <h1>MultivarMA</h1>
+  <p>Multivariate Meta-Analysis &mdash; Riley Random-Effects Model with Borrowing of Strength</p>
+</header>
+
+<div class="grid2">
+<!-- INPUT PANEL -->
+<div>
+  <div class="card">
+    <h2>Input Data</h2>
+    <label for="csvInput">Paste CSV (Study, Effect1, SE1, Effect2, SE2, [Effect3, SE3], [Correlation])</label>
+    <textarea id="csvInput" spellcheck="false" placeholder="Study,Effect1,SE1,Effect2,SE2,Correlation
+Pihlstrom 1983,-0.34,0.099,-0.31,0.072,0.41
+..."></textarea>
+    <div style="margin-top:0.5rem">
+      <button class="btn btn-secondary btn-sm" id="btnDemo">Load Demo (Berkey 1998)</button>
+    </div>
+    <div id="errorMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Settings</h2>
+    <div class="row">
+      <div>
+        <label for="nOutcomes">Number of outcomes</label>
+        <select id="nOutcomes">
+          <option value="2" selected>2 outcomes</option>
+          <option value="3">3 outcomes</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="label1">Outcome 1 label</label>
+        <input type="text" id="label1" value="PD">
+      </div>
+      <div>
+        <label for="label2">Outcome 2 label</label>
+        <input type="text" id="label2" value="AL">
+      </div>
+    </div>
+    <div class="row" id="label3Row" style="display:none">
+      <div>
+        <label for="label3">Outcome 3 label</label>
+        <input type="text" id="label3" value="Outcome 3">
+      </div>
+    </div>
+    <div>
+      <label>Default within-study correlation (used if column missing)</label>
+      <div class="slider-row">
+        <input type="range" id="rhoSlider" min="-0.95" max="0.95" step="0.01" value="0.50">
+        <span class="slider-val" id="rhoVal">0.50</span>
+      </div>
+    </div>
+    <div style="margin-top:0.75rem">
+      <button class="btn btn-primary" id="btnAnalyze">Analyze</button>
+    </div>
+  </div>
+</div>
+
+<!-- RESULTS PANEL -->
+<div>
+  <div id="resultsSection">
+    <!-- Summary stats -->
+    <div class="card" id="summaryCard">
+      <h2>Summary</h2>
+      <div id="summaryStats" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.75rem"></div>
+      <div id="summaryTable"></div>
+    </div>
+
+    <!-- Joint Forest Plot -->
+    <div class="card">
+      <h2>Joint Forest Plot</h2>
+      <div class="svg-container" id="forestContainer"></div>
+      <div class="export-row">
+        <button class="btn btn-secondary btn-sm" id="btnExportForestSVG">Export SVG</button>
+      </div>
+    </div>
+
+    <!-- BOS -->
+    <div class="results-grid">
+      <div class="card">
+        <h2>Borrowing of Strength</h2>
+        <div class="svg-container" id="bosContainer"></div>
+      </div>
+      <div class="card">
+        <h2>Between-Study Correlation (Tau)</h2>
+        <div class="svg-container" id="heatmapContainer"></div>
+      </div>
+    </div>
+
+    <!-- Export -->
+    <div class="card">
+      <h2>Export</h2>
+      <div class="export-row">
+        <button class="btn btn-secondary btn-sm" id="btnExportCSV">Export Results CSV</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<script>
+"use strict";
+/* ===== MULTIVARIATE META-ANALYSIS ENGINE ===== */
+
+// --- Linear Algebra Helpers ---
+function mat(rows, cols, fill) {
+  fill = fill || 0;
+  const m = [];
+  for (let i = 0; i < rows; i++) { m.push(new Array(cols).fill(fill)); }
+  return m;
+}
+function matCopy(A) { return A.map(r => r.slice()); }
+
+function matAdd(A, B) {
+  const n = A.length, p = A[0].length, C = mat(n, p);
+  for (let i = 0; i < n; i++) for (let j = 0; j < p; j++) C[i][j] = A[i][j] + B[i][j];
+  return C;
+}
+
+function matScale(A, s) {
+  return A.map(r => r.map(v => v * s));
+}
+
+function matMul(A, B) {
+  const n = A.length, m = B[0].length, p = B.length, C = mat(n, m);
+  for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) {
+    let s = 0; for (let k = 0; k < p; k++) s += A[i][k] * B[k][j]; C[i][j] = s;
+  }
+  return C;
+}
+
+function matVecMul(A, v) {
+  const n = A.length, r = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) for (let j = 0; j < v.length; j++) r[i] += A[i][j] * v[j];
+  return r;
+}
+
+function inv2(M) {
+  const a = M[0][0], b = M[0][1], c = M[1][0], d = M[1][1];
+  const det = a * d - b * c;
+  if (Math.abs(det) < 1e-30) return null;
+  const id = 1 / det;
+  return [[d * id, -b * id], [-c * id, a * id]];
+}
+
+function inv3(M) {
+  const a=M[0][0],b=M[0][1],c=M[0][2],d=M[1][0],e=M[1][1],f=M[1][2],g=M[2][0],h=M[2][1],k=M[2][2];
+  const A=e*k-f*h, B=-(d*k-f*g), C=d*h-e*g;
+  const D=-(b*k-c*h), E=a*k-c*g, F=-(a*h-b*g);
+  const G=b*f-c*e, H=-(a*f-c*d), K=a*e-b*d;
+  const det=a*A+b*B+c*C;
+  if(Math.abs(det)<1e-30)return null;
+  const id=1/det;
+  return [[A*id,D*id,G*id],[B*id,E*id,H*id],[C*id,F*id,K*id]];
+}
+
+function matInv(M) {
+  const n = M.length;
+  if (n === 2) return inv2(M);
+  if (n === 3) return inv3(M);
+  return null;
+}
+
+function matDet(M) {
+  const n = M.length;
+  if (n === 1) return M[0][0];
+  if (n === 2) return M[0][0]*M[1][1] - M[0][1]*M[1][0];
+  if (n === 3) {
+    return M[0][0]*(M[1][1]*M[2][2]-M[1][2]*M[2][1])
+          -M[0][1]*(M[1][0]*M[2][2]-M[1][2]*M[2][0])
+          +M[0][2]*(M[1][0]*M[2][1]-M[1][1]*M[2][0]);
+  }
+  return 0;
+}
+
+function matIdentity(n) {
+  const I = mat(n, n);
+  for (let i = 0; i < n; i++) I[i][i] = 1;
+  return I;
+}
+
+function matTrace(M) {
+  let s = 0; for (let i = 0; i < M.length; i++) s += M[i][i]; return s;
+}
+
+// Ensure PSD: eigenvalue clamping for 2x2/3x3 via nearPD-like approach
+function ensurePSD(M) {
+  const n = M.length;
+  if (n === 2) {
+    // For 2x2: compute eigenvalues analytically
+    const a = M[0][0], b = M[0][1], c = M[1][0], d = M[1][1];
+    const tr = a + d;
+    const det = a * d - b * c;
+    const disc = tr * tr - 4 * det;
+    if (disc < 0) {
+      // Already complex eigenvalues shouldn't happen for symmetric; force diagonal
+      M[0][1] = 0; M[1][0] = 0;
+      M[0][0] = Math.max(0, M[0][0]);
+      M[1][1] = Math.max(0, M[1][1]);
+      return M;
+    }
+    const sqrtDisc = Math.sqrt(disc);
+    const lam1 = (tr + sqrtDisc) / 2;
+    const lam2 = (tr - sqrtDisc) / 2;
+    if (lam2 >= 0) return M; // already PSD
+
+    // Reconstruct with clamped eigenvalues using Higham nearPD approach
+    const newLam2 = 0;
+    const newLam1 = Math.max(0, lam1);
+    // Eigenvector for lam1: (b, lam1 - a) normalized
+    let v1x = b, v1y = lam1 - a;
+    if (Math.abs(v1x) < 1e-15 && Math.abs(v1y) < 1e-15) { v1x = 1; v1y = 0; }
+    const norm1 = Math.sqrt(v1x * v1x + v1y * v1y);
+    v1x /= norm1; v1y /= norm1;
+    // Orthogonal eigenvector
+    const v2x = -v1y, v2y = v1x;
+    M[0][0] = newLam1 * v1x * v1x + newLam2 * v2x * v2x;
+    M[0][1] = newLam1 * v1x * v1y + newLam2 * v2x * v2y;
+    M[1][0] = M[0][1];
+    M[1][1] = newLam1 * v1y * v1y + newLam2 * v2y * v2y;
+    return M;
+  }
+  // For 3x3 fallback: iterative projection (simplified Higham)
+  for (let iter = 0; iter < 50; iter++) {
+    // Symmetrize
+    for (let i = 0; i < n; i++) for (let j = i+1; j < n; j++) {
+      const avg = (M[i][j] + M[j][i]) / 2; M[i][j] = avg; M[j][i] = avg;
+    }
+    // Check if PSD via Cholesky attempt
+    const L = choleskyAttempt(M);
+    if (L) return M;
+    // Add small ridge
+    for (let i = 0; i < n; i++) M[i][i] += 0.001;
+  }
+  return M;
+}
+
+function choleskyAttempt(A) {
+  const n = A.length;
+  const L = mat(n, n);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j <= i; j++) {
+      let s = 0;
+      for (let k = 0; k < j; k++) s += L[i][k] * L[j][k];
+      if (i === j) {
+        const val = A[i][i] - s;
+        if (val < 0) return null;
+        L[i][j] = Math.sqrt(val);
+      } else {
+        L[i][j] = (A[i][j] - s) / (L[j][j] || 1e-30);
+      }
+    }
+  }
+  return L;
+}
+
+// --- Distribution helpers ---
+function qnorm(p) {
+  // Rational approximation (Abramowitz & Stegun 26.2.23)
+  if (p <= 0) return -Infinity;
+  if (p >= 1) return Infinity;
+  if (p === 0.5) return 0;
+  const sgn = p < 0.5 ? -1 : 1;
+  const pp = p < 0.5 ? p : 1 - p;
+  const t = Math.sqrt(-2 * Math.log(pp));
+  const c0=2.515517,c1=0.802853,c2=0.010328;
+  const d1=1.432788,d2=0.189269,d3=0.001308;
+  return sgn * (t - (c0+c1*t+c2*t*t)/(1+d1*t+d2*t*t+d3*t*t*t));
+}
+
+// t-distribution quantile via approximation (Abramowitz)
+function qt(p, df) {
+  if (df <= 0) return qnorm(p);
+  if (df > 300) return qnorm(p); // approximate with normal for large df
+  // Hill's algorithm (1970) for t-quantile
+  const a = 1 / (df - 0.5);
+  const b = 48 / (a * a);
+  let c = ((20700 * a / b - 98) * a - 16) * a + 96.36;
+  const d = ((94.5 / (b + c) - 3) / b + 1) * Math.sqrt(a * Math.PI / 2) * df;
+  let x = d * (p < 0.5 ? p : 1 - p);
+  // Prefer iteration from normal approximation for better accuracy
+  const z = qnorm(p);
+  // Cornish-Fisher expansion
+  const g1 = (z*z*z + z) / (4*df);
+  const g2 = ((5*z*z*z*z*z + 16*z*z*z + 3*z) / (96*df*df));
+  let result = z + g1 + g2;
+  // Additional correction for small df
+  if (df < 5) {
+    // Use Newton refinement on the t-CDF (via betaI)
+    // Fallback: simple scaling
+    result = z * Math.sqrt(df / (df - 2 > 0 ? df - 2 : 0.5));
+    if (df <= 2) result = z * 1.5; // rough
+  }
+  return result;
+}
+
+// Better qt using bisection on t-CDF
+function tCDF(x, df) {
+  // Regularized incomplete beta
+  const t2 = x * x;
+  const v = df / (df + t2);
+  const ib = regBetaI(df/2, 0.5, v);
+  return x >= 0 ? 0.5 + 0.5*(1-ib) : 0.5*ib;
+}
+
+function regBetaI(a, b, x) {
+  // Continued fraction (Lentz) for regularized incomplete beta
+  if (x < 0 || x > 1) return 0;
+  if (x === 0) return 0;
+  if (x === 1) return 1;
+  const lbeta = lgamma(a) + lgamma(b) - lgamma(a+b);
+  const front = Math.exp(Math.log(x)*a + Math.log(1-x)*b - lbeta) / a;
+  // Use continued fraction
+  let f = 1, c = 1, d = 1 - (a+b)*x/(a+1);
+  if (Math.abs(d) < 1e-30) d = 1e-30;
+  d = 1/d; f = d;
+  for (let m = 1; m <= 200; m++) {
+    // Even step
+    let num = m*(b-m)*x / ((a+2*m-1)*(a+2*m));
+    d = 1 + num*d; if(Math.abs(d)<1e-30) d=1e-30; d=1/d;
+    c = 1 + num/c; if(Math.abs(c)<1e-30) c=1e-30;
+    f *= d*c;
+    // Odd step
+    num = -(a+m)*(a+b+m)*x / ((a+2*m)*(a+2*m+1));
+    d = 1 + num*d; if(Math.abs(d)<1e-30) d=1e-30; d=1/d;
+    c = 1 + num/c; if(Math.abs(c)<1e-30) c=1e-30;
+    f *= d*c;
+    if(Math.abs(d*c-1)<1e-10) break;
+  }
+  const result = front * f;
+  // If x > (a+1)/(a+b+2), use symmetry
+  if (x > (a+1)/(a+b+2)) {
+    return 1 - regBetaI(b, a, 1-x);
+  }
+  return result;
+}
+
+function lgamma(x) {
+  // Lanczos approximation
+  const g = 7;
+  const c = [0.99999999999980993,676.5203681218851,-1259.1392167224028,
+    771.32342877765313,-176.61502916214059,12.507343278686905,
+    -0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if (x < 0.5) return Math.log(Math.PI/Math.sin(Math.PI*x)) - lgamma(1-x);
+  x -= 1;
+  let a = c[0];
+  const t = x + g + 0.5;
+  for (let i = 1; i < g+2; i++) a += c[i]/(x+i);
+  return 0.5*Math.log(2*Math.PI) + (x+0.5)*Math.log(t) - t + Math.log(a);
+}
+
+function qtBisect(p, df) {
+  // Bisection on tCDF for accurate quantile
+  if (df > 200) return qnorm(p);
+  let lo = -30, hi = 30;
+  for (let i = 0; i < 100; i++) {
+    const mid = (lo + hi) / 2;
+    const cp = tCDF(mid, df);
+    if (cp < p) lo = mid; else hi = mid;
+    if (Math.abs(hi - lo) < 1e-9) break;
+  }
+  return (lo + hi) / 2;
+}
+
+// --- DerSimonian-Laird univariate ---
+function univariateDL(effects, ses) {
+  const k = effects.length;
+  if (k === 0) return { mu: NaN, se: NaN, tau2: 0, I2: 0 };
+  if (k === 1) return { mu: effects[0], se: ses[0], tau2: 0, I2: 0 };
+  const w = ses.map(s => 1 / (s * s));
+  const wSum = w.reduce((a, b) => a + b, 0);
+  const muFE = w.reduce((s, wi, i) => s + wi * effects[i], 0) / wSum;
+  let Q = 0;
+  for (let i = 0; i < k; i++) Q += w[i] * (effects[i] - muFE) ** 2;
+  const C = wSum - w.reduce((s, wi) => s + wi * wi, 0) / wSum;
+  let tau2 = Math.max(0, (Q - (k - 1)) / C);
+  const wRE = ses.map(s => 1 / (s * s + tau2));
+  const wREsum = wRE.reduce((a, b) => a + b, 0);
+  const muRE = wRE.reduce((s, wi, i) => s + wi * effects[i], 0) / wREsum;
+  const seRE = Math.sqrt(1 / wREsum);
+  const I2 = Q > (k - 1) ? Math.max(0, (Q - (k - 1)) / Q) * 100 : 0;
+  return { mu: muRE, se: seRE, tau2: tau2, I2: I2 };
+}
+
+// --- Riley Multivariate RE Model (iterative GLS with REML-like tau estimation) ---
+function multivariateMA(studies, nOut, defaultRho) {
+  const k = studies.length;
+  const p = nOut; // dimension
+
+  // Build within-study covariance matrices
+  const Sigma = [];
+  const Y = [];
+  for (let i = 0; i < k; i++) {
+    const st = studies[i];
+    const yi = [];
+    const Si = mat(p, p);
+    for (let j = 0; j < p; j++) {
+      yi.push(st.effects[j]);
+      Si[j][j] = st.ses[j] * st.ses[j];
+    }
+    // Off-diagonal: correlation * sqrt(v1*v2)
+    for (let j = 0; j < p; j++) {
+      for (let l = j + 1; l < p; l++) {
+        const rho = st.rho !== undefined && st.rho !== null ? st.rho : defaultRho;
+        const cov = rho * st.ses[j] * st.ses[l];
+        Si[j][l] = cov;
+        Si[l][j] = cov;
+      }
+    }
+    Sigma.push(Si);
+    Y.push(yi);
+  }
+
+  // Initialize Tau with DL estimates
+  const Tau = mat(p, p);
+  for (let j = 0; j < p; j++) {
+    const effs = [], ses = [];
+    for (let i = 0; i < k; i++) {
+      if (isFinite(studies[i].effects[j]) && studies[i].ses[j] < 1e5) {
+        effs.push(studies[i].effects[j]);
+        ses.push(studies[i].ses[j]);
+      }
+    }
+    if (effs.length >= 2) {
+      const uv = univariateDL(effs, ses);
+      Tau[j][j] = uv.tau2;
+    } else {
+      Tau[j][j] = 0.01;
+    }
+  }
+
+  // Iterative GLS
+  let mu = new Array(p).fill(0);
+  let prevMu = new Array(p).fill(Infinity);
+  const maxIter = 200;
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    // Compute weights W_i = (Sigma_i + Tau)^{-1}
+    const Ws = [];
+    let Wsum = mat(p, p);
+    let WYsum = new Array(p).fill(0);
+
+    for (let i = 0; i < k; i++) {
+      const V = matAdd(Sigma[i], Tau);
+      const Wi = matInv(V);
+      if (!Wi) {
+        // Fallback: add ridge
+        for (let j = 0; j < p; j++) V[j][j] += 0.001;
+        const Wi2 = matInv(V);
+        Ws.push(Wi2 || matIdentity(p));
+      } else {
+        Ws.push(Wi);
+      }
+      Wsum = matAdd(Wsum, Ws[i]);
+      const wy = matVecMul(Ws[i], Y[i]);
+      for (let j = 0; j < p; j++) WYsum[j] += wy[j];
+    }
+
+    const WsumInv = matInv(Wsum);
+    if (!WsumInv) break;
+    mu = matVecMul(WsumInv, WYsum);
+
+    // Check convergence
+    let maxDiff = 0;
+    for (let j = 0; j < p; j++) maxDiff = Math.max(maxDiff, Math.abs(mu[j] - prevMu[j]));
+    if (maxDiff < 1e-8 && iter > 0) break;
+    prevMu = mu.slice();
+
+    // Update Tau via method of moments (multivariate DL extension)
+    // Q_jl = sum_i (y_ij - mu_j)(y_il - mu_l) * w_ij * w_il - trace-based correction
+    // Simplified: update diagonal tau2 values, then off-diagonal via correlation
+    const newTau = mat(p, p);
+
+    for (let j = 0; j < p; j++) {
+      // Weighted Q for outcome j
+      let Qj = 0;
+      const wj = [];
+      let wjSum = 0;
+      for (let i = 0; i < k; i++) {
+        const vij = Sigma[i][j][j] + Tau[j][j];
+        const wij = 1 / vij;
+        wj.push(wij);
+        wjSum += wij;
+      }
+      for (let i = 0; i < k; i++) {
+        Qj += wj[i] * (Y[i][j] - mu[j]) ** 2;
+      }
+      const Cj = wjSum - wj.reduce((s, w) => s + w * w, 0) / wjSum;
+      const validK = wj.filter((w, i) => Sigma[i][j][j] < 1e5).length;
+      newTau[j][j] = Math.max(0, (Qj - (validK - 1)) / (Cj || 1));
+    }
+
+    // Off-diagonal: estimate between-study correlation
+    for (let j = 0; j < p; j++) {
+      for (let l = j + 1; l < p; l++) {
+        // Compute cross-product moment
+        let crossSum = 0, wCrossSum = 0;
+        for (let i = 0; i < k; i++) {
+          if (Sigma[i][j][j] < 1e5 && Sigma[i][l][l] < 1e5) {
+            const vij = Sigma[i][j][j] + Tau[j][j];
+            const vil = Sigma[i][l][l] + Tau[l][l];
+            const wc = 1 / Math.sqrt(vij * vil);
+            crossSum += wc * (Y[i][j] - mu[j]) * (Y[i][l] - mu[l]);
+            wCrossSum += wc;
+          }
+        }
+        const rhoEst = wCrossSum > 0 ? crossSum / wCrossSum : 0;
+        const maxCov = Math.sqrt(newTau[j][j] * newTau[l][l]);
+        // Clamp between-study covariance
+        newTau[j][l] = Math.max(-0.95 * maxCov, Math.min(0.95 * maxCov, rhoEst * maxCov));
+        newTau[l][j] = newTau[j][l];
+      }
+    }
+
+    // Ensure PSD
+    ensurePSD(newTau);
+
+    // Copy to Tau
+    for (let j = 0; j < p; j++) for (let l = 0; l < p; l++) Tau[j][l] = newTau[j][l];
+  }
+
+  // Final estimates with SEs
+  let Wsum = mat(p, p);
+  let WYsum = new Array(p).fill(0);
+  for (let i = 0; i < k; i++) {
+    const V = matAdd(Sigma[i], Tau);
+    const Wi = matInv(V);
+    if (!Wi) continue;
+    Wsum = matAdd(Wsum, Wi);
+    const wy = matVecMul(Wi, Y[i]);
+    for (let j = 0; j < p; j++) WYsum[j] += wy[j];
+  }
+  const WsumInv = matInv(Wsum);
+  if (WsumInv) {
+    mu = matVecMul(WsumInv, WYsum);
+  }
+
+  // SEs from diagonal of (sum Wi)^{-1}
+  const seMV = [];
+  if (WsumInv) {
+    for (let j = 0; j < p; j++) seMV.push(Math.sqrt(Math.max(0, WsumInv[j][j])));
+  } else {
+    for (let j = 0; j < p; j++) seMV.push(NaN);
+  }
+
+  // Univariate results for comparison & BOS
+  const uvResults = [];
+  for (let j = 0; j < p; j++) {
+    const effs = [], ses = [];
+    for (let i = 0; i < k; i++) {
+      if (isFinite(studies[i].effects[j]) && studies[i].ses[j] < 1e5) {
+        effs.push(studies[i].effects[j]);
+        ses.push(studies[i].ses[j]);
+      }
+    }
+    uvResults.push(univariateDL(effs, ses));
+  }
+
+  // BOS
+  const bos = [];
+  for (let j = 0; j < p; j++) {
+    const b = 1 - (seMV[j] / uvResults[j].se);
+    bos.push(isFinite(b) ? b : 0);
+  }
+
+  // I2 for each outcome (using Cochran Q from univariate)
+  const I2 = uvResults.map(uv => uv.I2);
+  const tau2 = [];
+  for (let j = 0; j < p; j++) tau2.push(Tau[j][j]);
+
+  // CIs using t-distribution with k-p df (HKSJ-like)
+  const df = Math.max(1, k - p);
+  const tCrit = Math.abs(qtBisect(0.025, df));
+  const ciLo = [], ciHi = [];
+  for (let j = 0; j < p; j++) {
+    ciLo.push(mu[j] - tCrit * seMV[j]);
+    ciHi.push(mu[j] + tCrit * seMV[j]);
+  }
+
+  return {
+    mu, seMV, ciLo, ciHi,
+    uvResults, bos,
+    Tau: matCopy(Tau), tau2, I2,
+    k, p, df, tCrit,
+    studies, Y, Sigma
+  };
+}
+
+// --- CSV Parsing ---
+function parseCSV(text, nOut) {
+  const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) throw new Error("Need at least a header + 1 data row");
+  const header = lines[0].split(',').map(s => s.trim().toLowerCase());
+
+  // Detect columns
+  const hasCorr = header.includes('correlation') || header.includes('corr') || header.includes('rho');
+  const has3 = header.includes('effect3') || header.includes('se3');
+
+  const studies = [];
+  for (let r = 1; r < lines.length; r++) {
+    const cols = lines[r].split(',').map(s => s.trim());
+    if (cols.length < 3) continue;
+    const name = cols[0] || ('Study ' + r);
+    const effects = [];
+    const ses = [];
+
+    // Outcome 1
+    const e1 = parseFloat(cols[1]);
+    const s1 = parseFloat(cols[2]);
+    effects.push(isFinite(e1) ? e1 : NaN);
+    ses.push(isFinite(s1) && s1 > 0 ? s1 : 1e10);
+
+    // Outcome 2
+    if (nOut >= 2 && cols.length >= 5) {
+      const e2 = parseFloat(cols[3]);
+      const s2 = parseFloat(cols[4]);
+      effects.push(isFinite(e2) ? e2 : NaN);
+      ses.push(isFinite(s2) && s2 > 0 ? s2 : 1e10);
+    } else if (nOut >= 2) {
+      effects.push(NaN);
+      ses.push(1e10);
+    }
+
+    // Outcome 3
+    if (nOut >= 3 && cols.length >= 7) {
+      const e3 = parseFloat(cols[5]);
+      const s3 = parseFloat(cols[6]);
+      effects.push(isFinite(e3) ? e3 : NaN);
+      ses.push(isFinite(s3) && s3 > 0 ? s3 : 1e10);
+    } else if (nOut >= 3) {
+      effects.push(NaN);
+      ses.push(1e10);
+    }
+
+    // Handle missing outcomes (set huge variance)
+    for (let j = 0; j < nOut; j++) {
+      if (!isFinite(effects[j])) {
+        effects[j] = 0; // placeholder, huge variance dominates
+        ses[j] = 1e10;
+      }
+    }
+
+    // Correlation
+    let rho = null;
+    if (hasCorr) {
+      const corrIdx = has3 ? (nOut >= 3 ? 7 : 5) : (nOut >= 3 ? 7 : 5);
+      // Find correlation column index
+      for (let ci = 0; ci < header.length; ci++) {
+        if (['correlation','corr','rho'].includes(header[ci])) {
+          const rv = parseFloat(cols[ci]);
+          if (isFinite(rv)) rho = Math.max(-0.95, Math.min(0.95, rv));
+          break;
+        }
+      }
+    }
+
+    studies.push({ name, effects, ses, rho });
+  }
+
+  if (studies.length === 0) throw new Error("No valid studies found");
+  return studies;
+}
+
+// ===== UI =====
+const $ = id => document.getElementById(id);
+
+// Elements
+const csvInput = $('csvInput');
+const rhoSlider = $('rhoSlider');
+const rhoVal = $('rhoVal');
+const nOutcomes = $('nOutcomes');
+const errorMsg = $('errorMsg');
+const resultsSection = $('resultsSection');
+
+rhoSlider.addEventListener('input', () => { rhoVal.textContent = parseFloat(rhoSlider.value).toFixed(2); });
+
+nOutcomes.addEventListener('change', () => {
+  $('label3Row').style.display = nOutcomes.value === '3' ? 'flex' : 'none';
+});
+
+$('btnDemo').addEventListener('click', () => {
+  csvInput.value = `Study,Effect1,SE1,Effect2,SE2,Correlation
+Pihlstrom 1983,-0.34,0.099,-0.31,0.072,0.41
+Lindhe 1984,0.01,0.112,-0.09,0.089,0.41
+Knowles 1983,-0.64,0.171,-0.63,0.143,0.32
+Ramfjord 1987,-0.32,0.075,-0.14,0.076,0.43
+Becker 1988,-0.10,0.118,0.15,0.101,0.34`;
+  nOutcomes.value = '2';
+  $('label1').value = 'PD';
+  $('label2').value = 'AL';
+  $('label3Row').style.display = 'none';
+});
+
+let lastResults = null;
+
+$('btnAnalyze').addEventListener('click', runAnalysis);
+
+function showError(msg) {
+  errorMsg.textContent = msg;
+  errorMsg.style.display = 'block';
+  resultsSection.style.display = 'none';
+}
+
+function hideError() {
+  errorMsg.style.display = 'none';
+}
+
+function runAnalysis() {
+  hideError();
+  try {
+    const nOut = parseInt(nOutcomes.value);
+    const defaultRho = parseFloat(rhoSlider.value);
+    const studies = parseCSV(csvInput.value, nOut);
+    const results = multivariateMA(studies, nOut, defaultRho);
+    lastResults = results;
+    lastResults.labels = [];
+    lastResults.labels.push($('label1').value || 'Outcome 1');
+    lastResults.labels.push($('label2').value || 'Outcome 2');
+    if (nOut >= 3) lastResults.labels.push($('label3').value || 'Outcome 3');
+    renderResults(results);
+    resultsSection.style.display = 'block';
+  } catch (e) {
+    showError('Error: ' + e.message);
+  }
+}
+
+function fmt(v, d) {
+  if (!isFinite(v)) return 'N/A';
+  d = d === undefined ? 3 : d;
+  return v.toFixed(d);
+}
+
+function renderResults(res) {
+  renderSummary(res);
+  renderForestPlot(res);
+  renderBOS(res);
+  renderHeatmap(res);
+}
+
+function renderSummary(res) {
+  const labels = lastResults.labels;
+  // Stat boxes
+  let html = '';
+  for (let j = 0; j < res.p; j++) {
+    html += `<div class="stat-box"><span class="val">${fmt(res.mu[j])}</span><span class="lbl">${labels[j]} pooled</span></div>`;
+  }
+  html += `<div class="stat-box"><span class="val">${res.k}</span><span class="lbl">Studies</span></div>`;
+  $('summaryStats').innerHTML = html;
+
+  // Table
+  let thtml = `<table id="summaryResultsTable"><thead><tr>
+    <th>Outcome</th><th>Pooled (MV)</th><th>SE (MV)</th><th>95% CI</th>
+    <th>Pooled (UV)</th><th>SE (UV)</th><th>BOS</th><th>tau&sup2;</th><th>I&sup2;</th>
+  </tr></thead><tbody>`;
+  for (let j = 0; j < res.p; j++) {
+    const uv = res.uvResults[j];
+    const uvCI_lo = uv.mu - 1.96 * uv.se;
+    const uvCI_hi = uv.mu + 1.96 * uv.se;
+    thtml += `<tr>
+      <td><strong>${labels[j]}</strong></td>
+      <td>${fmt(res.mu[j])}</td>
+      <td>${fmt(res.seMV[j], 4)}</td>
+      <td>[${fmt(res.ciLo[j])}, ${fmt(res.ciHi[j])}]</td>
+      <td>${fmt(uv.mu)}</td>
+      <td>${fmt(uv.se, 4)}</td>
+      <td>${fmt(res.bos[j] * 100, 1)}%</td>
+      <td>${fmt(res.tau2[j], 4)}</td>
+      <td>${fmt(res.I2[j], 1)}%</td>
+    </tr>`;
+  }
+  thtml += '</tbody></table>';
+  $('summaryTable').innerHTML = thtml;
+}
+
+function renderForestPlot(res) {
+  const labels = lastResults.labels;
+  const studies = res.studies;
+  const k = res.k;
+  const p = res.p;
+
+  const colW = 280;
+  const labelW = 130;
+  const rowH = 28;
+  const topPad = 50;
+  const botPad = 60;
+  const gapW = 20;
+  const totalW = labelW + p * colW + (p - 1) * gapW + 40;
+  const totalH = topPad + (k + 2) * rowH + botPad;
+
+  // Find x range for each outcome
+  const ranges = [];
+  for (let j = 0; j < p; j++) {
+    let mn = Infinity, mx = -Infinity;
+    for (let i = 0; i < k; i++) {
+      if (studies[i].ses[j] < 1e5) {
+        const lo = studies[i].effects[j] - 1.96 * studies[i].ses[j];
+        const hi = studies[i].effects[j] + 1.96 * studies[i].ses[j];
+        mn = Math.min(mn, lo);
+        mx = Math.max(mx, hi);
+      }
+    }
+    mn = Math.min(mn, res.ciLo[j]);
+    mx = Math.max(mx, res.ciHi[j]);
+    // UV
+    const uvLo = res.uvResults[j].mu - 1.96 * res.uvResults[j].se;
+    const uvHi = res.uvResults[j].mu + 1.96 * res.uvResults[j].se;
+    mn = Math.min(mn, uvLo);
+    mx = Math.max(mx, uvHi);
+    const pad = (mx - mn) * 0.15 || 0.1;
+    ranges.push({ min: mn - pad, max: mx + pad });
+  }
+
+  function xScale(val, j) {
+    const r = ranges[j];
+    const plotW = colW - 40;
+    return labelW + j * (colW + gapW) + 20 + (val - r.min) / (r.max - r.min) * plotW;
+  }
+
+  let svg = `<svg id="forestSVG" width="${totalW}" height="${totalH}" xmlns="http://www.w3.org/2000/svg" style="font-family:'Segoe UI',system-ui,sans-serif;font-size:11px">`;
+  svg += `<rect width="${totalW}" height="${totalH}" fill="#0a0e17" rx="8"/>`;
+
+  // Column headers
+  for (let j = 0; j < p; j++) {
+    const cx = labelW + j * (colW + gapW) + colW / 2;
+    svg += `<text x="${cx}" y="22" fill="${j===0?'#5b8cff':j===1?'#ff6b8a':'#4ecdc4'}" text-anchor="middle" font-weight="600" font-size="13">${labels[j]}</text>`;
+  }
+
+  // For each outcome column
+  for (let j = 0; j < p; j++) {
+    const x0line = xScale(0, j);
+    // Null line
+    svg += `<line x1="${x0line}" y1="${topPad - 10}" x2="${x0line}" y2="${topPad + (k+1)*rowH + 10}" stroke="rgba(255,255,255,0.15)" stroke-dasharray="3,3"/>`;
+
+    // Axis
+    const axisY = topPad + (k + 1.5) * rowH + 15;
+    const plotX0 = labelW + j * (colW + gapW) + 20;
+    const plotX1 = plotX0 + colW - 40;
+    svg += `<line x1="${plotX0}" y1="${axisY}" x2="${plotX1}" y2="${axisY}" stroke="rgba(255,255,255,0.3)"/>`;
+    // Ticks
+    const r = ranges[j];
+    const step = niceStep(r.max - r.min, 5);
+    for (let v = Math.ceil(r.min / step) * step; v <= r.max; v += step) {
+      const tx = xScale(v, j);
+      svg += `<line x1="${tx}" y1="${axisY-3}" x2="${tx}" y2="${axisY+3}" stroke="rgba(255,255,255,0.3)"/>`;
+      svg += `<text x="${tx}" y="${axisY+14}" fill="#8090b0" text-anchor="middle" font-size="9">${v.toFixed(2)}</text>`;
+    }
+  }
+
+  // Study rows
+  for (let i = 0; i < k; i++) {
+    const y = topPad + i * rowH + rowH / 2;
+    // Study label
+    svg += `<text x="5" y="${y+4}" fill="#e0e6f0" font-size="11">${studies[i].name}</text>`;
+
+    for (let j = 0; j < p; j++) {
+      if (studies[i].ses[j] >= 1e5) continue; // missing
+      const eff = studies[i].effects[j];
+      const se = studies[i].ses[j];
+      const lo = eff - 1.96 * se;
+      const hi = eff + 1.96 * se;
+      const cx = xScale(eff, j);
+      const x1 = xScale(lo, j);
+      const x2 = xScale(hi, j);
+      const color = j === 0 ? '#5b8cff' : j === 1 ? '#ff6b8a' : '#4ecdc4';
+      // CI line
+      svg += `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${color}" stroke-width="1.5" opacity="0.7"/>`;
+      // Point (size by precision)
+      const sz = Math.max(3, Math.min(8, 1 / (se * 5)));
+      svg += `<rect x="${cx-sz/2}" y="${y-sz/2}" width="${sz}" height="${sz}" fill="${color}" class="study-marker"/>`;
+    }
+  }
+
+  // Summary diamonds (multivariate)
+  const summaryY = topPad + k * rowH + rowH / 2;
+  svg += `<text x="5" y="${summaryY+4}" fill="#f59e0b" font-weight="700" font-size="11">MV Summary</text>`;
+  for (let j = 0; j < p; j++) {
+    const cx = xScale(res.mu[j], j);
+    const x1 = xScale(res.ciLo[j], j);
+    const x2 = xScale(res.ciHi[j], j);
+    const color = j === 0 ? '#5b8cff' : j === 1 ? '#ff6b8a' : '#4ecdc4';
+    const dh = 7;
+    svg += `<polygon points="${x1},${summaryY} ${cx},${summaryY-dh} ${x2},${summaryY} ${cx},${summaryY+dh}" fill="${color}" opacity="0.9" class="summary-diamond"/>`;
+  }
+
+  // Univariate dashed diamonds
+  const uvY = topPad + (k + 1) * rowH + rowH / 2;
+  svg += `<text x="5" y="${uvY+4}" fill="#8090b0" font-size="10">UV Summary</text>`;
+  for (let j = 0; j < p; j++) {
+    const uv = res.uvResults[j];
+    const cx = xScale(uv.mu, j);
+    const x1 = xScale(uv.mu - 1.96 * uv.se, j);
+    const x2 = xScale(uv.mu + 1.96 * uv.se, j);
+    const color = j === 0 ? '#5b8cff' : j === 1 ? '#ff6b8a' : '#4ecdc4';
+    const dh = 6;
+    svg += `<polygon points="${x1},${uvY} ${cx},${uvY-dh} ${x2},${uvY} ${cx},${uvY+dh}" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="4,2" opacity="0.7" class="uv-diamond"/>`;
+  }
+
+  svg += '</svg>';
+  $('forestContainer').innerHTML = svg;
+}
+
+function niceStep(range, maxTicks) {
+  const rough = range / maxTicks;
+  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+  const res = rough / mag;
+  let step;
+  if (res <= 1.5) step = 1;
+  else if (res <= 3) step = 2;
+  else if (res <= 7) step = 5;
+  else step = 10;
+  return step * mag;
+}
+
+function renderBOS(res) {
+  const labels = lastResults.labels;
+  const w = 280, h = 160, pad = 40;
+  const barW = Math.min(50, (w - 2 * pad) / res.p - 10);
+  let svg = `<svg id="bosSVG" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg" style="font-family:'Segoe UI',system-ui,sans-serif">`;
+  svg += `<rect width="${w}" height="${h}" fill="transparent"/>`;
+
+  // Y axis
+  const maxBOS = Math.max(0.5, ...res.bos.map(b => Math.abs(b) * 1.3));
+  const plotH = h - 2 * pad;
+  const zeroY = pad + plotH * (maxBOS / (2 * maxBOS));
+
+  svg += `<line x1="${pad}" y1="${pad}" x2="${pad}" y2="${h-pad}" stroke="rgba(255,255,255,0.2)"/>`;
+  svg += `<line x1="${pad}" y1="${zeroY}" x2="${w-10}" y2="${zeroY}" stroke="rgba(255,255,255,0.15)" stroke-dasharray="3,3"/>`;
+  svg += `<text x="${pad-5}" y="${zeroY+3}" fill="#8090b0" text-anchor="end" font-size="9">0%</text>`;
+
+  for (let j = 0; j < res.p; j++) {
+    const cx = pad + 20 + j * ((w - 2 * pad) / res.p) + barW / 2;
+    const bosVal = res.bos[j];
+    const barH = Math.abs(bosVal) / maxBOS * (plotH / 2);
+    const by = bosVal >= 0 ? zeroY - barH : zeroY;
+    const color = j === 0 ? '#5b8cff' : j === 1 ? '#ff6b8a' : '#4ecdc4';
+    svg += `<rect x="${cx - barW/2}" y="${by}" width="${barW}" height="${barH}" fill="${color}" opacity="0.8" rx="3" class="bos-bar"/>`;
+    svg += `<text x="${cx}" y="${h - pad + 14}" fill="#e0e6f0" text-anchor="middle" font-size="10">${labels[j]}</text>`;
+    svg += `<text x="${cx}" y="${by - 5}" fill="${color}" text-anchor="middle" font-size="10" font-weight="600">${(bosVal*100).toFixed(1)}%</text>`;
+  }
+
+  svg += '</svg>';
+  $('bosContainer').innerHTML = svg;
+}
+
+function renderHeatmap(res) {
+  const labels = lastResults.labels;
+  const p = res.p;
+  const cellSz = 60;
+  const pad = 70;
+  const w = pad + p * cellSz + 20;
+  const h = pad + p * cellSz + 20;
+
+  // Compute correlation matrix from Tau
+  const corr = mat(p, p);
+  for (let i = 0; i < p; i++) {
+    for (let j = 0; j < p; j++) {
+      const denom = Math.sqrt(Math.max(1e-15, res.Tau[i][i]) * Math.max(1e-15, res.Tau[j][j]));
+      corr[i][j] = denom > 0 ? res.Tau[i][j] / denom : (i === j ? 1 : 0);
+      corr[i][j] = Math.max(-1, Math.min(1, corr[i][j]));
+    }
+  }
+
+  let svg = `<svg id="heatmapSVG" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg" style="font-family:'Segoe UI',system-ui,sans-serif">`;
+  svg += `<rect width="${w}" height="${h}" fill="transparent"/>`;
+
+  for (let i = 0; i < p; i++) {
+    // Row labels
+    svg += `<text x="${pad - 8}" y="${pad + i * cellSz + cellSz/2 + 4}" fill="#e0e6f0" text-anchor="end" font-size="11">${labels[i]}</text>`;
+    // Col labels
+    svg += `<text x="${pad + i * cellSz + cellSz/2}" y="${pad - 10}" fill="#e0e6f0" text-anchor="middle" font-size="11">${labels[i]}</text>`;
+    for (let j = 0; j < p; j++) {
+      const v = corr[i][j];
+      const r = v > 0 ? Math.round(91 + v * 164) : Math.round(91);
+      const g = v > 0 ? Math.round(140 - v * 40) : Math.round(140 - Math.abs(v) * 80);
+      const b2 = v > 0 ? Math.round(255 - v * 100) : Math.round(255);
+      const color = v >= 0
+        ? `rgb(${Math.round(91 + v*100)}, ${Math.round(140 - v*60)}, ${Math.round(255 - v*155)})`
+        : `rgb(${Math.round(255 + v*100)}, ${Math.round(107 + Math.abs(v)*60)}, ${Math.round(138 + Math.abs(v)*50)})`;
+      const x = pad + j * cellSz;
+      const y = pad + i * cellSz;
+      svg += `<rect x="${x}" y="${y}" width="${cellSz-2}" height="${cellSz-2}" fill="${color}" rx="4" opacity="0.85" class="heatmap-cell"/>`;
+      svg += `<text x="${x + cellSz/2 - 1}" y="${y + cellSz/2 + 4}" fill="#fff" text-anchor="middle" font-size="12" font-weight="600">${v.toFixed(2)}</text>`;
+      // Also show tau2 on diagonal
+      if (i === j) {
+        svg += `<text x="${x + cellSz/2 - 1}" y="${y + cellSz/2 + 16}" fill="rgba(255,255,255,0.6)" text-anchor="middle" font-size="8">tau2=${res.tau2[i].toFixed(4)}</text>`;
+      }
+    }
+  }
+
+  svg += '</svg>';
+  $('heatmapContainer').innerHTML = svg;
+}
+
+// --- Export ---
+$('btnExportForestSVG').addEventListener('click', () => {
+  const svgEl = document.getElementById('forestSVG');
+  if (!svgEl) return;
+  const blob = new Blob([svgEl.outerHTML], { type: 'image/svg+xml' });
+  downloadBlob(blob, 'multivarma-forest.svg');
+});
+
+$('btnExportCSV').addEventListener('click', () => {
+  if (!lastResults) return;
+  const res = lastResults;
+  const labels = res.labels;
+  let csv = 'Type';
+  for (let j = 0; j < res.p; j++) csv += `,${labels[j]}_Effect,${labels[j]}_SE,${labels[j]}_CI_Lo,${labels[j]}_CI_Hi`;
+  csv += ',BOS\n';
+
+  // MV summary
+  csv += 'Multivariate';
+  for (let j = 0; j < res.p; j++) {
+    csv += `,${res.mu[j].toFixed(4)},${res.seMV[j].toFixed(4)},${res.ciLo[j].toFixed(4)},${res.ciHi[j].toFixed(4)}`;
+  }
+  csv += ',\n';
+
+  // UV summary
+  csv += 'Univariate';
+  for (let j = 0; j < res.p; j++) {
+    const uv = res.uvResults[j];
+    csv += `,${uv.mu.toFixed(4)},${uv.se.toFixed(4)},${(uv.mu-1.96*uv.se).toFixed(4)},${(uv.mu+1.96*uv.se).toFixed(4)}`;
+  }
+  csv += ',\n';
+
+  // BOS
+  csv += 'BOS';
+  for (let j = 0; j < res.p; j++) {
+    csv += `,${(res.bos[j]*100).toFixed(2)}%,,,`;
+  }
+  csv += ',\n';
+
+  // Studies
+  csv += '\nStudy';
+  for (let j = 0; j < res.p; j++) csv += `,${labels[j]}_Effect,${labels[j]}_SE`;
+  csv += '\n';
+  for (let i = 0; i < res.k; i++) {
+    csv += res.studies[i].name;
+    for (let j = 0; j < res.p; j++) {
+      if (res.studies[i].ses[j] < 1e5) {
+        csv += `,${res.studies[i].effects[j]},${res.studies[i].ses[j]}`;
+      } else {
+        csv += ',,';
+      }
+    }
+    csv += '\n';
+  }
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  downloadBlob(blob, 'multivarma-results.csv');
+});
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
