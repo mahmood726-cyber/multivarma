@@ -191,6 +191,13 @@ Pihlstrom 1983,-0.34,0.099,-0.31,0.072,0.41
 "use strict";
 /* ===== MULTIVARIATE META-ANALYSIS ENGINE ===== */
 
+// --- CSV injection guard ---
+function csvSafe(s) {
+  s = String(s);
+  if (/^[=+@\t\r]/.test(s)) return "'" + s;
+  return s;
+}
+
 // --- Linear Algebra Helpers ---
 function mat(rows, cols, fill) {
   fill = fill || 0;
@@ -272,55 +279,131 @@ function matTrace(M) {
   let s = 0; for (let i = 0; i < M.length; i++) s += M[i][i]; return s;
 }
 
-// Ensure PSD: eigenvalue clamping for 2x2/3x3 via nearPD-like approach
+// Project a symmetric matrix onto the PSD cone (clamp eigenvalues >= 0)
+// Uses Jacobi eigenvalue algorithm for any size
+function projectPSD(A) {
+  const n = A.length;
+  // Copy A
+  let S = A.map(r => [...r]);
+  // Eigenvectors start as identity
+  let V = mat(n, n);
+  for (let i = 0; i < n; i++) V[i][i] = 1;
+
+  // Jacobi iteration for symmetric eigenvalue decomposition
+  for (let sweep = 0; sweep < 100; sweep++) {
+    // Find largest off-diagonal element
+    let maxVal = 0, p = 0, q = 1;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        if (Math.abs(S[i][j]) > maxVal) {
+          maxVal = Math.abs(S[i][j]);
+          p = i; q = j;
+        }
+      }
+    }
+    if (maxVal < 1e-12) break;
+
+    // Compute Jacobi rotation
+    const Spq = S[p][q];
+    const diff = S[q][q] - S[p][p];
+    let t;
+    if (Math.abs(Spq) < 1e-30) {
+      t = 0;
+    } else if (Math.abs(diff) < 1e-30) {
+      t = Spq > 0 ? 1 : -1;
+    } else {
+      const phi = diff / (2 * Spq);
+      t = 1 / (Math.abs(phi) + Math.sqrt(phi * phi + 1));
+      if (phi < 0) t = -t;
+    }
+    const c = 1 / Math.sqrt(t * t + 1);
+    const s = t * c;
+
+    // Update S: Givens rotation
+    const Spp = S[p][p], Sqq = S[q][q];
+    S[p][p] = c * c * Spp - 2 * s * c * Spq + s * s * Sqq;
+    S[q][q] = s * s * Spp + 2 * s * c * Spq + c * c * Sqq;
+    S[p][q] = 0; S[q][p] = 0;
+    for (let i = 0; i < n; i++) {
+      if (i !== p && i !== q) {
+        const Sip = S[i][p], Siq = S[i][q];
+        S[i][p] = c * Sip - s * Siq; S[p][i] = S[i][p];
+        S[i][q] = s * Sip + c * Siq; S[q][i] = S[i][q];
+      }
+    }
+    // Update eigenvectors
+    for (let i = 0; i < n; i++) {
+      const Vip = V[i][p], Viq = V[i][q];
+      V[i][p] = c * Vip - s * Viq;
+      V[i][q] = s * Vip + c * Viq;
+    }
+  }
+
+  // Clamp eigenvalues >= 0 and reconstruct: V * max(D,0) * V^T
+  const result = mat(n, n);
+  for (let i = 0; i < n; i++) {
+    const lam = Math.max(0, S[i][i]);
+    for (let r = 0; r < n; r++) {
+      for (let c2 = 0; c2 < n; c2++) {
+        result[r][c2] += lam * V[r][i] * V[c2][i];
+      }
+    }
+  }
+  return result;
+}
+
+// Ensure PSD: Higham (2002) alternating projection (nearPD)
+// Alternates between PSD cone projection and diagonal preservation
 function ensurePSD(M) {
   const n = M.length;
-  if (n === 2) {
-    // For 2x2: compute eigenvalues analytically
-    const a = M[0][0], b = M[0][1], c = M[1][0], d = M[1][1];
-    const tr = a + d;
-    const det = a * d - b * c;
-    const disc = tr * tr - 4 * det;
-    if (disc < 0) {
-      // Already complex eigenvalues shouldn't happen for symmetric; force diagonal
-      M[0][1] = 0; M[1][0] = 0;
-      M[0][0] = Math.max(0, M[0][0]);
-      M[1][1] = Math.max(0, M[1][1]);
-      return M;
-    }
-    const sqrtDisc = Math.sqrt(disc);
-    const lam1 = (tr + sqrtDisc) / 2;
-    const lam2 = (tr - sqrtDisc) / 2;
-    if (lam2 >= 0) return M; // already PSD
 
-    // Reconstruct with clamped eigenvalues using Higham nearPD approach
-    const newLam2 = 0;
-    const newLam1 = Math.max(0, lam1);
-    // Eigenvector for lam1: (b, lam1 - a) normalized
-    let v1x = b, v1y = lam1 - a;
-    if (Math.abs(v1x) < 1e-15 && Math.abs(v1y) < 1e-15) { v1x = 1; v1y = 0; }
-    const norm1 = Math.sqrt(v1x * v1x + v1y * v1y);
-    v1x /= norm1; v1y /= norm1;
-    // Orthogonal eigenvector
-    const v2x = -v1y, v2y = v1x;
-    M[0][0] = newLam1 * v1x * v1x + newLam2 * v2x * v2x;
-    M[0][1] = newLam1 * v1x * v1y + newLam2 * v2x * v2y;
-    M[1][0] = M[0][1];
-    M[1][1] = newLam1 * v1y * v1y + newLam2 * v2y * v2y;
-    return M;
+  // Quick check: already PSD via Cholesky?
+  const Lcheck = choleskyAttempt(M);
+  if (Lcheck) return M;
+
+  // Save original diagonal (variances to preserve)
+  const origDiag = [];
+  for (let i = 0; i < n; i++) origDiag.push(M[i][i]);
+
+  // Symmetrize input
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    const avg = (M[i][j] + M[j][i]) / 2; M[i][j] = avg; M[j][i] = avg;
   }
-  // For 3x3 fallback: iterative projection (simplified Higham)
-  for (let iter = 0; iter < 50; iter++) {
-    // Symmetrize
-    for (let i = 0; i < n; i++) for (let j = i+1; j < n; j++) {
-      const avg = (M[i][j] + M[j][i]) / 2; M[i][j] = avg; M[j][i] = avg;
-    }
-    // Check if PSD via Cholesky attempt
-    const L = choleskyAttempt(M);
-    if (L) return M;
-    // Add small ridge
-    for (let i = 0; i < n; i++) M[i][i] += 0.001;
+
+  let Y = M.map(r => [...r]);
+  let dS = mat(n, n); // Dykstra correction
+
+  for (let iter = 0; iter < 100; iter++) {
+    // R = Y - dS (Dykstra correction)
+    let R = Y.map((r, i) => r.map((v, j) => v - dS[i][j]));
+
+    // Project onto PSD cone
+    let X = projectPSD(R);
+
+    // Dykstra correction update
+    dS = X.map((r, i) => r.map((v, j) => v - R[i][j]));
+
+    // Project onto matrices preserving original diagonal
+    let Ynew = X.map((r, i) => r.map((v, j) => i === j ? origDiag[i] : v));
+
+    // Check convergence: max difference between X and Ynew
+    let maxDiff = 0;
+    for (let i = 0; i < n; i++)
+      for (let j = 0; j < n; j++)
+        maxDiff = Math.max(maxDiff, Math.abs(X[i][j] - Ynew[i][j]));
+
+    Y = Ynew;
+    if (maxDiff < 1e-8) break;
   }
+
+  // Final PSD projection to guarantee result is PSD
+  const result = projectPSD(Y);
+
+  // Copy result back into M (in-place mutation)
+  for (let i = 0; i < n; i++)
+    for (let j = 0; j < n; j++)
+      M[i][j] = result[i][j];
+
   return M;
 }
 
@@ -1123,7 +1206,7 @@ $('btnExportCSV').addEventListener('click', () => {
   for (let j = 0; j < res.p; j++) csv += `,${labels[j]}_Effect,${labels[j]}_SE`;
   csv += '\n';
   for (let i = 0; i < res.k; i++) {
-    csv += res.studies[i].name;
+    csv += csvSafe(res.studies[i].name);
     for (let j = 0; j < res.p; j++) {
       if (res.studies[i].ses[j] < 1e5) {
         csv += `,${res.studies[i].effects[j]},${res.studies[i].ses[j]}`;
